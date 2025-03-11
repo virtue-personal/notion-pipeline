@@ -17,7 +17,7 @@ jobs:
           PRIORITY=$(echo "$RESPONSE" | jq -r '.fields | .priority // "P2"')
           SIZE=$(echo "$RESPONSE" | jq -r '.fields | .size // "M"')
           STATUS=$(echo "$RESPONSE" | jq -r '.fields | .status // "시작 전"')
-          DUE_DATE=$(echo "$RESPONSE" | jq -r '.fields | .due_date // null')
+          DUE_DATE=$(echo "$RESPONSE" | jq -r '.fields | .due_date // ""')
 
           echo "PRIORITY=$PRIORITY" >> $GITHUB_ENV
           echo "SIZE=$SIZE" >> $GITHUB_ENV
@@ -51,12 +51,12 @@ jobs:
               "시작일": {
                 "date": { "start": "${{ github.event.issue.created_at }}" }
               },
-              "종료일": {
-                "date": { "start": "'"${{ env.DUE_DATE }}"'" }
-              },
               "GitHub Issue URL": {
                 "url": { "url": "${{ github.event.issue.html_url }}" }
               }
             }
           }'
-
+          # 종료일 값이 있을 경우 추가
+          if [[ ! -z "$DUE_DATE" ]]; then
+            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg dueDate "$DUE_DATE" '.properties["종료일"] = {"date": {"start": $dueDate}}')
+          fi
