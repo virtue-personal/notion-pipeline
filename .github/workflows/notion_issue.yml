@@ -29,9 +29,6 @@ jobs:
               "GitHub 풀 리퀘스트": {
                 "relation": [] 
               },
-              "담당자": { 
-                "people": [{ "id": "${{ github.event.issue.user.id }}" }] 
-              },
               "생성 날짜": { 
                 "date": { "start": "${{ github.event.issue.created_at }}" } 
               }
