@@ -51,7 +51,7 @@ jobs:
               "우선순위": { "select": { "name": "'"${{ env.PRIORITY }}"'" } },
               "규모": { "select": { "name": "'"${{ env.SIZE }}"'" } },
               "시작일": { "date": { "start": "'"${{ env.START_DATE }}"'" } },
-              "GitHub Issue URL": { "url": "'"${{ github.event.issue.html_url }}"'" }
+              "GitHub 이슈": { "url": "'"${{ github.event.issue.html_url }}"'" }
             },
             "children": [
               {
