@@ -1,8 +1,10 @@
-name: GitHub Issue 생성 시 Notion 자동 등록
+name: GitHub Issue & Project 변경 시 Notion 자동 동기화
 
 on:
   issues:
     types: [opened]
+  projects_v2_item:
+    types: [edited]
 
 jobs:
   notion_issue_update:
@@ -11,7 +13,13 @@ jobs:
       - name: GitHub Projects 속성 가져오기
         id: get_project_data
         run: |
-          PROJECTS_API_URL="https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/projects"
+          if [[ "${{ github.event_name }}" == "issues" ]]; then
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+          else
+            ISSUE_NUMBER=$(echo "${{ github.event.projects_v2_item.content_node_id }}" | awk -F "/" '{print $NF}')
+          fi
+
+          PROJECTS_API_URL="https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/projects"
           RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" "$PROJECTS_API_URL")
 
           PRIORITY=$(echo "$RESPONSE" | jq -r '.fields | .priority // "P2"')
@@ -37,8 +45,9 @@ jobs:
           echo "STATUS=$STATUS" >> $GITHUB_ENV
           echo "START_DATE=$START_DATE" >> $GITHUB_ENV
           echo "END_DATE=$END_DATE" >> $GITHUB_ENV
+          echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> $GITHUB_ENV
 
-      - name: Notion에 Issue 추가 (본문 포함)
+      - name: Notion에 Issue 추가 또는 업데이트
         run: |
           # Issue 본문을 JSON 형식으로 변환 (개행 처리)
           ISSUE_BODY=$(echo "${{ github.event.issue.body }}" | jq -Rs '.')
@@ -51,7 +60,7 @@ jobs:
               "우선순위": { "select": { "name": "'"${{ env.PRIORITY }}"'" } },
               "규모": { "select": { "name": "'"${{ env.SIZE }}"'" } },
               "시작일": { "date": { "start": "'"${{ env.START_DATE }}"'" } },
-              "GitHub 이슈": { "url": "'"${{ github.event.issue.html_url }}"'" }
+              "GitHub 이슈": { "url": "'"https://github.com/${{ github.repository }}/issues/${{ env.ISSUE_NUMBER }}"'" }
             },
             "children": [
               {
