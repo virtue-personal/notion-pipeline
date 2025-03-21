@@ -22,18 +22,23 @@ jobs:
           PROJECTS_API_URL="https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER"
           RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" "$PROJECTS_API_URL")
 
-          PRIORITY=$(echo "$RESPONSE" | jq -r '[.labels[]?.name] | map(select(test("P[0-9]")))[0] // "P2"')
-          SIZE=$(echo "$RESPONSE" | jq -r '[.labels[]?.name] | map(select(test("XS|S|M|L|XL")))[0] // "M"')
-          STATUS=$(echo "$RESPONSE" | jq -r '.state // "시작 전"')
-          START_DATE=$(echo "$RESPONSE" | jq -r '.created_at // ""')
-          END_DATE=$(echo "$RESPONSE" | jq -r '.closed_at // ""')
+          # GitHub Projects에서 상태(Status) 가져오기
+          STATUS=$(echo "$RESPONSE" | jq -r '.state // empty')
 
-          # 종료일 값이 없거나 "null"이면 제거
-          if [[ -z "$END_DATE" || "$END_DATE" == "null" ]]; then
-            END_DATE=""
-          else
-            END_DATE="${END_DATE}T23:59:59Z"
-          fi
+          # GitHub Projects에서 우선순위, 크기 가져오기
+          PRIORITY=$(echo "$RESPONSE" | jq -r '[.labels[]?.name] | map(select(test("P[0-9]")))[0] // empty')
+          SIZE=$(echo "$RESPONSE" | jq -r '[.labels[]?.name] | map(select(test("XS|S|M|L|XL")))[0] // empty')
+
+          # GitHub Projects에서 시작일, 종료일 가져오기
+          START_DATE=$(echo "$RESPONSE" | jq -r '.created_at // empty')
+          END_DATE=$(echo "$RESPONSE" | jq -r '.closed_at // empty')
+
+          # 값이 "null"이면 빈 문자열로 변경 (Notion에서 빈 값으로 처리)
+          [[ "$STATUS" == "null" ]] && STATUS=""
+          [[ "$PRIORITY" == "null" ]] && PRIORITY=""
+          [[ "$SIZE" == "null" ]] && SIZE=""
+          [[ "$START_DATE" == "null" ]] && START_DATE=""
+          [[ "$END_DATE" == "null" ]] && END_DATE=""
 
           echo "PRIORITY=$PRIORITY" >> $GITHUB_ENV
           echo "SIZE=$SIZE" >> $GITHUB_ENV
@@ -52,8 +57,8 @@ jobs:
             "properties": {
               "이슈명": { "title": [{ "text": { "content": "'"${{ github.event.issue.title }}"'" }}] },
               "Status": { "status": { "name": "'"${{ env.STATUS }}"'" } },
+              "우선순위": { "select": { "name": "'"${{ env.PRIORITY }}"'" } },
               "규모": { "select": { "name": "'"${{ env.SIZE }}"'" } },
-              "시작일": { "date": { "start": "'"${{ env.START_DATE }}"'" } },
               "GitHub 이슈": { "url": "'"https://github.com/${{ github.repository }}/issues/${{ env.ISSUE_NUMBER }}"'" }
             },
             "children": [
@@ -72,14 +77,14 @@ jobs:
             ]
           }'
 
-          # 종료일 값이 있으면 JSON에 추가
-          if [[ ! -z "$END_DATE" ]]; then
-            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg endDate "$END_DATE" '.properties["종료일"] = {"date": {"start": $endDate}}')
+          # 시작일 값이 있을 경우 추가
+          if [[ ! -z "$START_DATE" ]]; then
+            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg startDate "$START_DATE" '.properties["시작일"] = {"date": {"start": $startDate}}')
           fi
 
-          # 우선순위 값이 유효하면 추가
-          if [[ ! -z "$PRIORITY" && "$PRIORITY" != "null" ]]; then
-            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg priority "$PRIORITY" '.properties["우선순위"] = {"select": {"name": $priority}}')
+          # 종료일 값이 있을 경우 추가
+          if [[ ! -z "$END_DATE" ]]; then
+            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg endDate "$END_DATE" '.properties["종료일"] = {"date": {"start": $endDate}}')
           fi
 
           # 최종 JSON 구조 확인 (디버깅)
