@@ -22,8 +22,8 @@ jobs:
           PROJECTS_API_URL="https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER"
           RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" "$PROJECTS_API_URL")
 
-          PRIORITY=$(echo "$RESPONSE" | jq -r '.labels[] | select(.name | startswith("P")).name // "P2"')
-          SIZE=$(echo "$RESPONSE" | jq -r '.labels[] | select(.name | test("XS|S|M|L|XL")).name // "M"')
+          PRIORITY=$(echo "$RESPONSE" | jq -r '[.labels[]?.name] | map(select(test("P[0-9]")))[0] // "P2"')
+          SIZE=$(echo "$RESPONSE" | jq -r '[.labels[]?.name] | map(select(test("XS|S|M|L|XL")))[0] // "M"')
           STATUS=$(echo "$RESPONSE" | jq -r '.state // "시작 전"')
           START_DATE=$(echo "$RESPONSE" | jq -r '.created_at // ""')
           END_DATE=$(echo "$RESPONSE" | jq -r '.closed_at // ""')
@@ -52,7 +52,6 @@ jobs:
             "properties": {
               "이슈명": { "title": [{ "text": { "content": "'"${{ github.event.issue.title }}"'" }}] },
               "Status": { "status": { "name": "'"${{ env.STATUS }}"'" } },
-              "우선순위": { "select": { "name": "'"${{ env.PRIORITY }}"'" } },
               "규모": { "select": { "name": "'"${{ env.SIZE }}"'" } },
               "시작일": { "date": { "start": "'"${{ env.START_DATE }}"'" } },
               "GitHub 이슈": { "url": "'"https://github.com/${{ github.repository }}/issues/${{ env.ISSUE_NUMBER }}"'" }
@@ -76,6 +75,11 @@ jobs:
           # 종료일 값이 있으면 JSON에 추가
           if [[ ! -z "$END_DATE" ]]; then
             JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg endDate "$END_DATE" '.properties["종료일"] = {"date": {"start": $endDate}}')
+          fi
+
+          # 우선순위 값이 유효하면 추가
+          if [[ ! -z "$PRIORITY" && "$PRIORITY" != "null" ]]; then
+            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg priority "$PRIORITY" '.properties["우선순위"] = {"select": {"name": $priority}}')
           fi
 
           # 최종 JSON 구조 확인 (디버깅)
