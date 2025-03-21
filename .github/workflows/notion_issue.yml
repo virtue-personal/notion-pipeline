@@ -2,9 +2,9 @@ name: GitHub Issue & Project 변경 시 Notion 자동 동기화
 
 on:
   issues:
-    types: [opened]
-  projects_v2_item:
-    types: [edited]
+    types: [opened, edited]
+  project_card:
+    types: [moved, created, deleted, edited]
 
 jobs:
   notion_issue_update:
@@ -16,22 +16,17 @@ jobs:
           if [[ "${{ github.event_name }}" == "issues" ]]; then
             ISSUE_NUMBER="${{ github.event.issue.number }}"
           else
-            ISSUE_NUMBER=$(echo "${{ github.event.projects_v2_item.content_node_id }}" | awk -F "/" '{print $NF}')
+            ISSUE_NUMBER=$(echo "${{ github.event.project_card.content_url }}" | awk -F "/" '{print $NF}')
           fi
 
-          PROJECTS_API_URL="https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/projects"
+          PROJECTS_API_URL="https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER"
           RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" "$PROJECTS_API_URL")
 
-          PRIORITY=$(echo "$RESPONSE" | jq -r '.fields | .priority // "P2"')
-          SIZE=$(echo "$RESPONSE" | jq -r '.fields | .size // "M"')
-          STATUS=$(echo "$RESPONSE" | jq -r '.fields | .status // "시작 전"')
-          START_DATE=$(echo "$RESPONSE" | jq -r '.fields | .start_date // ""')
-          END_DATE=$(echo "$RESPONSE" | jq -r '.fields | .end_date // ""')
-
-          # 시작일이 비어 있으면 GitHub Issue 생성 날짜 사용
-          if [[ -z "$START_DATE" || "$START_DATE" == "null" ]]; then
-            START_DATE="${{ github.event.issue.created_at }}"
-          fi
+          PRIORITY=$(echo "$RESPONSE" | jq -r '.labels[] | select(.name | startswith("P")).name // "P2"')
+          SIZE=$(echo "$RESPONSE" | jq -r '.labels[] | select(.name | test("XS|S|M|L|XL")).name // "M"')
+          STATUS=$(echo "$RESPONSE" | jq -r '.state // "시작 전"')
+          START_DATE=$(echo "$RESPONSE" | jq -r '.created_at // ""')
+          END_DATE=$(echo "$RESPONSE" | jq -r '.closed_at // ""')
 
           # 종료일 값이 없거나 "null"이면 제거
           if [[ -z "$END_DATE" || "$END_DATE" == "null" ]]; then
