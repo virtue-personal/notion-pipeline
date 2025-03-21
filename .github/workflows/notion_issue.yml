@@ -17,39 +17,61 @@ jobs:
           PRIORITY=$(echo "$RESPONSE" | jq -r '.fields | .priority // "P2"')
           SIZE=$(echo "$RESPONSE" | jq -r '.fields | .size // "M"')
           STATUS=$(echo "$RESPONSE" | jq -r '.fields | .status // "시작 전"')
-          DUE_DATE=$(echo "$RESPONSE" | jq -r '.fields | .due_date // ""')
+          START_DATE=$(echo "$RESPONSE" | jq -r '.fields | .start_date // ""')
+          END_DATE=$(echo "$RESPONSE" | jq -r '.fields | .end_date // ""')
 
           # 종료일 값이 없거나 "null"이면 제거
-          if [[ -z "$DUE_DATE" || "$DUE_DATE" == "null" ]]; then
-            DUE_DATE=""
+          if [[ -z "$END_DATE" || "$END_DATE" == "null" ]]; then
+            END_DATE=""
           else
-            DUE_DATE="${DUE_DATE}T23:59:59Z"
+            END_DATE="${END_DATE}T23:59:59Z"
           fi
 
           echo "PRIORITY=$PRIORITY" >> $GITHUB_ENV
           echo "SIZE=$SIZE" >> $GITHUB_ENV
           echo "STATUS=$STATUS" >> $GITHUB_ENV
-          echo "DUE_DATE=$DUE_DATE" >> $GITHUB_ENV
+          echo "START_DATE=$START_DATE" >> $GITHUB_ENV
+          echo "END_DATE=$END_DATE" >> $GITHUB_ENV
 
-      - name: Notion에 Issue 추가
+      - name: Notion에 Issue 추가 (본문 포함)
         run: |
+          # Issue 본문을 JSON 형식으로 변환 (개행 처리)
+          ISSUE_BODY=$(echo "${{ github.event.issue.body }}" | jq -Rs '.')
+
           JSON_PAYLOAD='{
             "parent": { "database_id": "'"${{ secrets.NOTION_DATABASE_ID }}"'" },
             "properties": {
-              "작업": { "title": [{ "text": { "content": "${{ github.event.issue.title }}" }}] },
-              "기능명": { "rich_text": [{ "text": { "content": "${{ github.event.issue.body }}" }}] },
+              "이슈명": { "title": [{ "text": { "content": "'"${{ github.event.issue.title }}"'" }}] },
               "Status": { "status": { "name": "'"${{ env.STATUS }}"'" } },
               "우선순위": { "select": { "name": "'"${{ env.PRIORITY }}"'" } },
               "규모": { "select": { "name": "'"${{ env.SIZE }}"'" } },
-              "시작일": { "date": { "start": "${{ github.event.issue.created_at }}" } },
+              "시작일": { "date": { "start": "'"${{ env.START_DATE }}"'" } },
               "GitHub Issue URL": { "url": "'"${{ github.event.issue.html_url }}"'" }
-            }
+            },
+            "children": [
+              {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                  "rich_text": [
+                    {
+                      "type": "text",
+                      "text": { "content": '"$ISSUE_BODY"' }
+                    }
+                  ]
+                }
+              }
+            ]
           }'
 
           # 종료일 값이 있으면 JSON에 추가
-          if [[ ! -z "$DUE_DATE" ]]; then
-            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg dueDate "$DUE_DATE" '.properties["종료일"] = {"date": {"start": $dueDate}}')
+          if [[ ! -z "$END_DATE" ]]; then
+            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg endDate "$END_DATE" '.properties["종료일"] = {"date": {"start": $endDate}}')
           fi
+
+          # 최종 JSON 구조 확인 (디버깅)
+          echo "Final JSON Payload:"
+          echo "$JSON_PAYLOAD" | jq .
 
           curl -X POST "https://api.notion.com/v1/pages" \
           -H "Authorization: Bearer ${{ secrets.NOTION_API_KEY }}" \
