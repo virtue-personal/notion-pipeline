@@ -13,23 +13,14 @@ jobs:
       - name: GitHub Projects 속성 가져오기
         id: get_project_data
         run: |
-          if [[ "${{ github.event_name }}" == "issues" ]]; then
-            ISSUE_NUMBER="${{ github.event.issue.number }}"
-          else
-            ISSUE_NUMBER=$(echo "${{ github.event.project_card.content_url }}" | awk -F "/" '{print $NF}')
-          fi
-
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
           PROJECTS_API_URL="https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER"
           RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Accept: application/vnd.github.v3+json" "$PROJECTS_API_URL")
 
-          # GitHub Projects에서 상태(Status) 가져오기
+          # GitHub Projects에서 값 가져오기
           STATUS=$(echo "$RESPONSE" | jq -r '.state // empty')
-
-          # GitHub Projects에서 우선순위, 크기 가져오기
           PRIORITY=$(echo "$RESPONSE" | jq -r '[.labels[]?.name] | map(select(test("P[0-9]")))[0] // empty')
           SIZE=$(echo "$RESPONSE" | jq -r '[.labels[]?.name] | map(select(test("XS|S|M|L|XL")))[0] // empty')
-
-          # GitHub Projects에서 시작일, 종료일 가져오기
           START_DATE=$(echo "$RESPONSE" | jq -r '.created_at // empty')
           END_DATE=$(echo "$RESPONSE" | jq -r '.closed_at // empty')
 
@@ -57,8 +48,6 @@ jobs:
             "properties": {
               "이슈명": { "title": [{ "text": { "content": "'"${{ github.event.issue.title }}"'" }}] },
               "Status": { "status": { "name": "'"${{ env.STATUS }}"'" } },
-              "우선순위": { "select": { "name": "'"${{ env.PRIORITY }}"'" } },
-              "규모": { "select": { "name": "'"${{ env.SIZE }}"'" } },
               "GitHub 이슈": { "url": "'"https://github.com/${{ github.repository }}/issues/${{ env.ISSUE_NUMBER }}"'" }
             },
             "children": [
@@ -85,6 +74,16 @@ jobs:
           # 종료일 값이 있을 경우 추가
           if [[ ! -z "$END_DATE" ]]; then
             JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg endDate "$END_DATE" '.properties["종료일"] = {"date": {"start": $endDate}}')
+          fi
+
+          # 우선순위 값이 있을 경우 추가
+          if [[ ! -z "$PRIORITY" ]]; then
+            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg priority "$PRIORITY" '.properties["우선순위"] = {"select": {"name": $priority}}')
+          fi
+
+          # 규모 값이 있을 경우 추가
+          if [[ ! -z "$SIZE" ]]; then
+            JSON_PAYLOAD=$(echo "$JSON_PAYLOAD" | jq --arg size "$SIZE" '.properties["규모"] = {"select": {"name": $size}}')
           fi
 
           # 최종 JSON 구조 확인 (디버깅)
