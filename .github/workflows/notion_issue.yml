@@ -20,6 +20,11 @@ jobs:
           START_DATE=$(echo "$RESPONSE" | jq -r '.fields | .start_date // ""')
           END_DATE=$(echo "$RESPONSE" | jq -r '.fields | .end_date // ""')
 
+          # 시작일이 비어 있으면 GitHub Issue 생성 날짜 사용
+          if [[ -z "$START_DATE" || "$START_DATE" == "null" ]]; then
+            START_DATE="${{ github.event.issue.created_at }}"
+          fi
+
           # 종료일 값이 없거나 "null"이면 제거
           if [[ -z "$END_DATE" || "$END_DATE" == "null" ]]; then
             END_DATE=""
